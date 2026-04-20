@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+:root {
+  --ink-950: #050a11;
+  --ink-900: #091423;
+  --ink-800: #10213a;
+  --panel-strong: rgba(8, 20, 35, 0.9);
+  --panel-soft: rgba(11, 25, 44, 0.72);
+  --line-soft: rgba(163, 184, 211, 0.14);
+  --line-strong: rgba(127, 241, 186, 0.24);
+  --turf-500: #50d488;
+  --turf-300: #8ef4b6;
+  --amber-400: #ffbf57;
+  --amber-300: #ffd789;
+  --alert-500: #ff6c61;
+  --alert-300: #ffb2ac;
+  --snow-100: #f5f8fb;
+  --snow-200: #d4deeb;
+  --snow-300: #a8b9cf;
+  --shadow-xl: 0 24px 80px rgba(0, 0, 0, 0.36);
+}
+
+@theme inline {
+  --color-background: var(--ink-950);
+  --color-foreground: var(--snow-100);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(80, 212, 136, 0.14), transparent 34%),
+    radial-gradient(circle at top right, rgba(255, 191, 87, 0.12), transparent 22%),
+    linear-gradient(180deg, #07101d 0%, #050a11 100%);
+  color: var(--snow-100);
+  font-family: var(--font-body), sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.sr-only-focusable {
+  position: absolute;
+  left: 1rem;
+  top: -10rem;
+  z-index: 50;
+  border-radius: 999px;
+  padding: 0.8rem 1rem;
+  background: var(--snow-100);
+  color: var(--ink-950);
+  transition: top 180ms ease;
+}
+
+.sr-only-focusable:focus {
+  top: 1rem;
+}
+
+.ambient-screen {
+  position: relative;
+  overflow: hidden;
+}
+
+.ambient-screen::before,
+.ambient-screen::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ambient-screen::before {
+  background:
+    linear-gradient(90deg, rgba(80, 212, 136, 0.06) 1px, transparent 1px),
+    linear-gradient(rgba(80, 212, 136, 0.05) 1px, transparent 1px);
+  background-size: 88px 88px, 88px 88px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.8), transparent 88%);
+}
+
+.ambient-screen::after {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0) 12%,
+    rgba(255, 255, 255, 0.03) 24%,
+    rgba(255, 255, 255, 0) 36%
+  );
+  background-size: 100% 12px;
+  opacity: 0.26;
+}
+
+.panel-shell {
+  position: relative;
+  border: 1px solid var(--line-soft);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    var(--panel-soft);
+  box-shadow: var(--shadow-xl);
+  backdrop-filter: blur(18px);
+}
+
+.panel-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid transparent;
+  border-image: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.02) 45%,
+      rgba(80, 212, 136, 0.24)
+    )
+    1;
+  pointer-events: none;
+}
+
+.display-kicker {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.metric-card {
+  border: 1px solid var(--line-soft);
+  background: rgba(5, 13, 24, 0.64);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 0.45rem 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--snow-200);
+}
+
+.status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 14px currentColor;
+}
+
+.zone-bar {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.zone-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(80, 212, 136, 0.86), rgba(255, 191, 87, 0.96));
+}
+
+.glow-accent {
+  box-shadow: 0 0 0 1px rgba(80, 212, 136, 0.18), 0 0 24px rgba(80, 212, 136, 0.16);
+}
+
+.danger-accent {
+  box-shadow: 0 0 0 1px rgba(255, 108, 97, 0.22), 0 0 22px rgba(255, 108, 97, 0.18);
+}
+
+.floating-orb {
+  animation: drift 18s ease-in-out infinite;
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .ambient-screen::after,
+  .floating-orb {
+    animation: none;
+  }
+}

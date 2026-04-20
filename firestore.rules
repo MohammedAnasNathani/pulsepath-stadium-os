@@ -1,0 +1,18 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /pulsepath/live {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /pulsepath-reports/{reportId} {
+      allow read, write: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "apphosting": [
+    {
+      "backendId": "pulsepath-stadium",
+      "rootDir": ".",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".next",
+        ".test-dist",
+        "firebase-debug.log",
+        "firebase-debug.*.log"
+      ]
+    }
+  ],
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}
