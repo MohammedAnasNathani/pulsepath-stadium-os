@@ -1,4 +1,5 @@
 import { persistScenarioState } from "@/lib/google-services";
+import { recordOpsSignal } from "@/lib/ops-analytics";
 import { getScenarioState } from "@/lib/scenarios";
 import { ValidationError, parseScenarioId } from "@/lib/validation";
 
@@ -10,6 +11,11 @@ export async function POST(request: Request) {
     const scenarioId = parseScenarioId(body);
     const state = getScenarioState(scenarioId);
     const sync = await persistScenarioState(state);
+    await recordOpsSignal({
+      signalType: "scenario_switch",
+      venueState: state,
+      message: state.narrative,
+    }).catch(() => "derived");
 
     return Response.json({
       state,

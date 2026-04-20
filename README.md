@@ -6,7 +6,7 @@ PulsePath Stadium OS is a single-stadium crowd coordination platform built for t
 
 - Real product shape: one app serves both the attendee and the operations team.
 - Strong prompt-native story: deterministic routing first, Gemini-enhanced explanations second.
-- Google-forward architecture: Next.js + Firebase App Hosting + live Firestore sync + Gemini on Vertex AI.
+- Google-forward architecture: Next.js + Firebase App Hosting + live Firestore sync + Gemini on Vertex AI + BigQuery ops analytics.
 - Manual-review friendly: the repo includes the README, technical blog draft, LinkedIn post draft, demo script, and Antigravity process notes.
 
 ## Challenge fit
@@ -37,6 +37,7 @@ This project directly addresses the PromptWars physical venue brief:
   - `emergency-exit`
 - Live alert cards and zone heat status
 - AI-ready ops announcement copy
+- BigQuery-backed signal warehouse for scenario switches, crowd reports, and assistant usage
 - Scenario mutation endpoint via `POST /api/scenario`
 - Attendee feedback capture via `POST /api/report`
 
@@ -61,6 +62,7 @@ This project directly addresses the PromptWars physical venue brief:
 - Firestore-backed persistence for scenario state and crowd reports
 - Service-account-aware server persistence for Google-hosted environments
 - Vertex AI path for hosted Gemini explanations
+- BigQuery dataset `pulsepath_analytics` for ops event analytics
 
 ## API surface
 
@@ -73,6 +75,8 @@ This project directly addresses the PromptWars physical venue brief:
 - `POST /api/scenario`
   - Input: `{ scenarioId }`
   - Output: new `VenueState`
+- `GET /api/ops-analytics`
+  - Output: BigQuery-backed scenario analytics with fallback derivation
 - `GET /api/scenario/[scenarioId]`
   - Output: a specific scenario snapshot for testing or QA
 
@@ -120,7 +124,7 @@ Optional variables:
 - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 
-The app is fully demoable without env vars. In the hosted project, App Hosting, Firestore, and Vertex AI are active.
+The app is fully demoable without env vars. In the hosted project, App Hosting, Firestore, Vertex AI, and BigQuery are active.
 
 ## Firebase and App Hosting
 
@@ -167,4 +171,5 @@ See:
 - The venue is a fictional mega-stadium used to simulate high-stakes match-day flows.
 - The product optimizes for a polished single-venue narrative over a thin multi-venue platform.
 - Firestore sync is live in the hosted environment and falls back safely during local offline demo use.
+- BigQuery analytics are live in the hosted environment and track scenario changes, crowd reports, and assistant usage.
 - Server writes are validated first and secrets are never exposed to the client.

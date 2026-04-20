@@ -10,6 +10,7 @@ import {
   defaultProfile,
   goals,
   mobilityNeeds,
+  type OpsAnalyticsSnapshot,
   personas,
   groupTypes,
   budgetModes,
@@ -42,6 +43,21 @@ type GoogleStatus = {
   databaseId: string;
   appHosting: boolean;
   vertexMode: "api-key" | "service-account" | "offline";
+};
+
+const defaultOpsAnalytics: OpsAnalyticsSnapshot = {
+  mode: "derived",
+  datasetId: "pulsepath_analytics",
+  tableId: "ops_signals",
+  updatedAt: new Date().toISOString(),
+  totalSignals: 0,
+  crowdReports: 0,
+  scenarioSwitches: 0,
+  assistantRuns: 0,
+  hybridAiRuns: 0,
+  averageQueueMins: 0,
+  topPressureZone: "Awaiting sync",
+  scenarioBreakdown: [],
 };
 
 function labelForTone(tone: "positive" | "warning" | "critical") {
@@ -81,6 +97,7 @@ export function PulsePathDashboard({ initialScenario }: Props) {
     appHosting: false,
     vertexMode: "offline",
   });
+  const [opsAnalytics, setOpsAnalytics] = useState<OpsAnalyticsSnapshot>(defaultOpsAnalytics);
   const [realtimeMode, setRealtimeMode] = useState<"demo" | "listening" | "offline">("demo");
   const [feedbackNote, setFeedbackNote] = useState("");
   const [reportMessage, setReportMessage] = useState("Crowd felt smoother than expected once rerouted.");
@@ -109,6 +126,19 @@ export function PulsePathDashboard({ initialScenario }: Props) {
   const assistantResponse =
     assistantOverride?.key === requestKey ? assistantOverride.value : fallbackRecommendation;
   const opsAnnouncement = createOpsAnnouncement(venueState, assistantResponse.rankedActions[0]);
+
+  const refreshOpsAnalytics = async (scenarioId: ScenarioId) => {
+    const response = await fetch(`/api/ops-analytics?scenarioId=${scenarioId}`, {
+      cache: "no-store",
+    }).catch(() => null);
+
+    if (!response?.ok) {
+      return;
+    }
+
+    const payload = (await response.json()) as OpsAnalyticsSnapshot;
+    setOpsAnalytics(payload);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +206,36 @@ export function PulsePathDashboard({ initialScenario }: Props) {
     return () => window.clearInterval(intervalId);
   }, [activeScenario, googleStatus.mode]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadOpsAnalytics = async () => {
+      const response = await fetch(`/api/ops-analytics?scenarioId=${activeScenario}`, {
+        cache: "no-store",
+      }).catch(() => null);
+
+      if (!response?.ok || cancelled) {
+        return;
+      }
+
+      const payload = (await response.json()) as OpsAnalyticsSnapshot;
+
+      if (!cancelled) {
+        setOpsAnalytics(payload);
+      }
+    };
+
+    void loadOpsAnalytics();
+    const intervalId = window.setInterval(() => {
+      void loadOpsAnalytics();
+    }, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeScenario]);
+
   const askAssistant = () => {
     startAssistantTransition(async () => {
       const response = await fetch("/api/assistant", {
@@ -207,6 +267,7 @@ export function PulsePathDashboard({ initialScenario }: Props) {
           ? "Gemini or Vertex AI layered a live explanation on top of the deterministic routing engine."
           : "No live model path responded, so PulsePath stayed in deterministic safety mode.",
       );
+      void refreshOpsAnalytics(activeScenario);
     });
   };
 
@@ -236,6 +297,7 @@ export function PulsePathDashboard({ initialScenario }: Props) {
           ? `Scenario synced to Firestore database ${payload.sync.databaseId} for cross-screen playback.`
           : "Scenario changed locally. Google sync could not be reached, so the app stayed in deterministic demo mode.",
       );
+      void refreshOpsAnalytics(scenarioId);
     });
   };
 
@@ -264,6 +326,7 @@ export function PulsePathDashboard({ initialScenario }: Props) {
       const payload = (await response.json()) as { sync: GoogleStatus };
       setGoogleStatus(payload.sync);
       setFeedbackNote("Crowd report captured. Ops can use this to train future routing policies.");
+      void refreshOpsAnalytics(activeScenario);
     });
   };
 
@@ -361,6 +424,7 @@ export function PulsePathDashboard({ initialScenario }: Props) {
                 <li>Deterministic routing stays safe even without a live model response.</li>
                 <li>App Hosting + Firestore keep the venue twin Google-native and deployable.</li>
                 <li>Gemini/Vertex can upgrade explanations on top of the same routing engine.</li>
+                <li>BigQuery turns venue decisions into judge-visible ops analytics.</li>
               </ul>
             </div>
           </div>
@@ -608,6 +672,10 @@ export function PulsePathDashboard({ initialScenario }: Props) {
                         <div className="display-kicker text-[10px] text-[var(--snow-300)]">AI Path</div>
                         <div className="mt-1 text-white">{googleStatus.vertexMode}</div>
                       </div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-sm">
+                        <div className="display-kicker text-[10px] text-[var(--snow-300)]">Analytics</div>
+                        <div className="mt-1 text-white">{opsAnalytics.mode}</div>
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -693,6 +761,66 @@ export function PulsePathDashboard({ initialScenario }: Props) {
                       {scenarioCard.focus}
                     </p>
                   </button>
+                ))}
+              </div>
+            </article>
+
+            <article className="panel-shell rounded-[2rem] p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="display-kicker text-xs text-[var(--turf-300)]">BigQuery analytics</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">Venue signal warehouse</h2>
+                </div>
+                <span className="status-pill">
+                  <span
+                    className={`status-dot ${
+                      opsAnalytics.mode === "bigquery" ? "text-[var(--turf-300)]" : "text-[var(--amber-300)]"
+                    }`}
+                  />
+                  {opsAnalytics.mode === "bigquery"
+                    ? `${opsAnalytics.datasetId}.${opsAnalytics.tableId}`
+                    : "Derived fallback"}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                {[
+                  { label: "Signals", value: opsAnalytics.totalSignals },
+                  { label: "Scenario switches", value: opsAnalytics.scenarioSwitches },
+                  { label: "Crowd reports", value: opsAnalytics.crowdReports },
+                  { label: "Hybrid AI runs", value: opsAnalytics.hybridAiRuns },
+                ].map((metric) => (
+                  <div key={metric.label} className="rounded-2xl border border-white/8 bg-black/15 px-4 py-3">
+                    <div className="display-kicker text-[10px] text-[var(--snow-300)]">{metric.label}</div>
+                    <div className="mt-2 text-2xl font-semibold text-white">{metric.value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 rounded-[1.5rem] border border-white/8 bg-black/15 p-4">
+                <div className="flex flex-col gap-2 text-sm text-[var(--snow-200)]">
+                  <div>Top pressure zone: <span className="font-semibold text-white">{opsAnalytics.topPressureZone}</span></div>
+                  <div>Average queue: <span className="font-semibold text-white">{opsAnalytics.averageQueueMins} min</span></div>
+                  <div>Updated: <span className="font-semibold text-white">{new Date(opsAnalytics.updatedAt).toLocaleTimeString()}</span></div>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {opsAnalytics.scenarioBreakdown.slice(0, 4).map((scenario) => (
+                  <div
+                    key={scenario.scenarioId}
+                    className="rounded-[1.5rem] border border-white/8 bg-black/15 px-4 py-3 text-sm text-[var(--snow-200)]"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-semibold text-white">{scenario.label}</div>
+                      <div>{scenario.totalSignals} signals</div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                      <span className="status-pill">{scenario.crowdReports} crowd reports</span>
+                      <span className="status-pill">{scenario.scenarioSwitches} scenario switches</span>
+                      <span className="status-pill">{scenario.hybridAiRuns} hybrid AI runs</span>
+                    </div>
+                  </div>
                 ))}
               </div>
             </article>

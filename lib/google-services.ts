@@ -4,7 +4,7 @@ const FALLBACK_PROJECT_ID = "kydo-project";
 const FALLBACK_FIRESTORE_DATABASE_ID = "firestoredatabaseil";
 const LIVE_STATE_DOCUMENT_PATH = "pulsepath/live";
 
-function getProjectId() {
+export function getGoogleProjectId() {
   return (
     process.env.GOOGLE_CLOUD_PROJECT ??
     process.env.GCLOUD_PROJECT ??
@@ -14,11 +14,11 @@ function getProjectId() {
   );
 }
 
-function getDatabaseId() {
+export function getGoogleDatabaseId() {
   return process.env.FIRESTORE_DATABASE_ID ?? FALLBACK_FIRESTORE_DATABASE_ID;
 }
 
-async function getAccessToken() {
+export async function getGoogleAccessToken(fetchImpl: typeof fetch = fetch) {
   const staticToken = process.env.GOOGLE_ACCESS_TOKEN;
 
   if (staticToken) {
@@ -29,7 +29,7 @@ async function getAccessToken() {
     return null;
   }
 
-  const response = await fetch(
+  const response = await fetchImpl(
     "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
     {
       headers: {
@@ -141,14 +141,14 @@ function fromFirestoreValue(value: FirestoreValue): unknown {
 }
 
 function buildDocumentUrl(documentPath: string) {
-  return `https://firestore.googleapis.com/v1/projects/${getProjectId()}/databases/${getDatabaseId()}/documents/${documentPath}`;
+  return `https://firestore.googleapis.com/v1/projects/${getGoogleProjectId()}/databases/${getGoogleDatabaseId()}/documents/${documentPath}`;
 }
 
 export function getGoogleRuntimeStatus(mode: GoogleSyncMode): GoogleRuntimeStatus {
   return {
     mode,
-    projectId: getProjectId(),
-    databaseId: getDatabaseId(),
+    projectId: getGoogleProjectId(),
+    databaseId: getGoogleDatabaseId(),
     appHosting: Boolean(process.env.K_SERVICE),
     vertexMode: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
       ? "api-key"
@@ -159,7 +159,7 @@ export function getGoogleRuntimeStatus(mode: GoogleSyncMode): GoogleRuntimeStatu
 }
 
 async function patchDocument(documentPath: string, payload: unknown) {
-  const accessToken = await getAccessToken();
+  const accessToken = await getGoogleAccessToken();
 
   if (!accessToken) {
     return getGoogleRuntimeStatus("demo");
@@ -183,7 +183,7 @@ async function patchDocument(documentPath: string, payload: unknown) {
 }
 
 async function getDocument(documentPath: string) {
-  const accessToken = await getAccessToken();
+  const accessToken = await getGoogleAccessToken();
 
   if (!accessToken) {
     return null;

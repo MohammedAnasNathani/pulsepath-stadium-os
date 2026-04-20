@@ -142,6 +142,33 @@ export interface CrowdReport {
   submittedAt: string;
 }
 
+export type OpsSignalType = "scenario_switch" | "crowd_report" | "assistant_request";
+
+export interface ScenarioAnalytics {
+  scenarioId: ScenarioId;
+  label: string;
+  totalSignals: number;
+  crowdReports: number;
+  scenarioSwitches: number;
+  assistantRuns: number;
+  hybridAiRuns: number;
+}
+
+export interface OpsAnalyticsSnapshot {
+  mode: "bigquery" | "derived";
+  datasetId: string;
+  tableId: string;
+  updatedAt: string;
+  totalSignals: number;
+  crowdReports: number;
+  scenarioSwitches: number;
+  assistantRuns: number;
+  hybridAiRuns: number;
+  averageQueueMins: number;
+  topPressureZone: string;
+  scenarioBreakdown: ScenarioAnalytics[];
+}
+
 export interface ScenarioCard {
   id: ScenarioId;
   label: string;

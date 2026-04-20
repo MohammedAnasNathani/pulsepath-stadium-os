@@ -66,8 +66,9 @@ Then I layered Gemini on top to rewrite that deterministic output into more natu
 I leaned into Google services in a practical way:
 
 - Firebase App Hosting configuration for deployment of the full-stack Next.js app
-- Firestore-ready persistence path for live scenario state and crowd reports
-- Gemini REST integration for assistant explanations
+- Firestore persistence path for live scenario state and crowd reports
+- Gemini integration through Vertex AI for assistant explanations
+- BigQuery analytics for scenario switches, crowd reports, and assistant usage
 - Cloud-host aware server logic so Firestore writes can run through service account credentials on hosted infrastructure
 
 This matters because the PromptWars rubric explicitly rewards meaningful Google-service usage, not just frontend polish.

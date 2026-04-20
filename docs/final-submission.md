@@ -36,3 +36,4 @@ PulsePath Stadium OS is a dual-surface stadium intelligence platform that improv
 - Firebase App Hosting is serving the production deployment.
 - Firestore is live for shared scenario state and crowd-report persistence.
 - Gemini on Vertex AI is enabled for hosted assistant explanations, with deterministic fallback if the model path is unavailable.
+- BigQuery is live for venue signal analytics across scenario changes, crowd reports, and assistant usage.
