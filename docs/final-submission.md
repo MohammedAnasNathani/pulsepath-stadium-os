@@ -30,3 +30,9 @@ Use the copy in [docs/linkedin-post.md](/Users/mohammedanasnathani/Downloads/Pro
 ## Suggested one-line summary for forms
 
 PulsePath Stadium OS is a dual-surface stadium intelligence platform that improves crowd movement, waiting times, accessibility rerouting, and real-time venue coordination for large sporting events.
+
+## Live Google Services Proof
+
+- Firebase App Hosting is serving the production deployment.
+- Firestore is live for shared scenario state and crowd-report persistence.
+- Gemini on Vertex AI is enabled for hosted assistant explanations, with deterministic fallback if the model path is unavailable.

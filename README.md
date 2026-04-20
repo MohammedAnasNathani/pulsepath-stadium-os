@@ -6,7 +6,7 @@ PulsePath Stadium OS is a single-stadium crowd coordination platform built for t
 
 - Real product shape: one app serves both the attendee and the operations team.
 - Strong prompt-native story: deterministic routing first, Gemini-enhanced explanations second.
-- Google-forward architecture: Next.js + Firebase/App Hosting-ready deployment + Firestore-ready sync + Gemini REST integration.
+- Google-forward architecture: Next.js + Firebase App Hosting + live Firestore sync + Gemini on Vertex AI.
 - Manual-review friendly: the repo includes the README, technical blog draft, LinkedIn post draft, demo script, and Antigravity process notes.
 
 ## Challenge fit
@@ -15,7 +15,7 @@ This project directly addresses the PromptWars physical venue brief:
 
 - Crowd movement: live zone density, route ranking, reroute instructions, and emergency dispersal.
 - Waiting times: queue-aware gate, restroom, and concession recommendations.
-- Real-time coordination: the ops panel switches scenarios, generates public announcements, and syncs state to Firestore when Google credentials are available.
+- Real-time coordination: the ops panel switches scenarios, generates public announcements, and syncs state through Firestore-backed live state.
 - Seamless fan experience: personalization by persona, budget, group type, mobility needs, and current zone.
 
 ## Core features
@@ -52,15 +52,15 @@ This project directly addresses the PromptWars physical venue brief:
 ### Intelligence layer
 
 - Deterministic scoring engine in [lib/recommendation-engine.ts](/Users/mohammedanasnathani/Downloads/PromptWars/lib/recommendation-engine.ts)
-- Optional Gemini REST augmentation using `gemini-2.5-flash`
+- Gemini augmentation using `gemini-2.5-flash`, with Vertex AI enabled in the hosted project
 - Graceful fallback to deterministic reasoning when Gemini is unavailable
 
 ### Google services
 
-- Firebase App Hosting-ready local source deployment config
-- Firestore-ready persistence path for scenario state and crowd reports
+- Firebase App Hosting deployment on `kydo-project`
+- Firestore-backed persistence for scenario state and crowd reports
 - Service-account-aware server persistence for Google-hosted environments
-- Public Firebase client hooks for realtime sync when web config is provided
+- Vertex AI path for hosted Gemini explanations
 
 ## API surface
 
@@ -120,7 +120,7 @@ Optional variables:
 - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 
-The app is fully demoable without env vars. Google integrations upgrade the experience when present.
+The app is fully demoable without env vars. In the hosted project, App Hosting, Firestore, and Vertex AI are active.
 
 ## Firebase and App Hosting
 
@@ -166,5 +166,5 @@ See:
 
 - The venue is a fictional mega-stadium used to simulate high-stakes match-day flows.
 - The product optimizes for a polished single-venue narrative over a thin multi-venue platform.
-- Firestore sync is optional at runtime but wired in for Google-hosted environments.
+- Firestore sync is live in the hosted environment and falls back safely during local offline demo use.
 - Server writes are validated first and secrets are never exposed to the client.
