@@ -2,7 +2,7 @@ import type { CrowdReport, VenueState } from "./types";
 
 const FALLBACK_PROJECT_ID = "kydo-project";
 const FALLBACK_FIRESTORE_DATABASE_ID = "firestoredatabaseil";
-const LIVE_STATE_DOCUMENT_PATH = "pulsepath/live/state";
+const LIVE_STATE_DOCUMENT_PATH = "pulsepath/live";
 
 function getProjectId() {
   return (
