@@ -38,6 +38,29 @@ test("parseAssistantRequest rejects invalid enum values", () => {
   );
 });
 
+test("parseAssistantRequest rejects malformed venue state payloads", () => {
+  const venueState = getScenarioState("pre-entry-rush");
+
+  assert.throws(
+    () =>
+      parseAssistantRequest({
+        profile: defaultProfile,
+        currentZone: "Fan Plaza",
+        activeScenario: "pre-entry-rush",
+        venueState: {
+          ...venueState,
+          zones: [
+            {
+              ...venueState.zones[0],
+              status: "mystery",
+            },
+          ],
+        },
+      }),
+    ValidationError,
+  );
+});
+
 test("parseScenarioId and parseCrowdReport validate user input", () => {
   assert.equal(parseScenarioId({ scenarioId: "halftime-surge" }), "halftime-surge");
   assert.equal(
