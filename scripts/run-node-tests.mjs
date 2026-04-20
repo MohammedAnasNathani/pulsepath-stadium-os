@@ -17,3 +17,7 @@ await run("node", ["--test", ".test-dist/tests/*.test.js"], {
   shell: true,
   stdio: "inherit",
 });
+
+await rm(new URL("../.test-dist", import.meta.url), { force: true, recursive: true }).catch(
+  () => undefined,
+);

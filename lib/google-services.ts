@@ -1,13 +1,21 @@
 import type { CrowdReport, VenueState } from "./types";
 
+const FALLBACK_PROJECT_ID = "kydo-project";
+const FALLBACK_FIRESTORE_DATABASE_ID = "firestoredatabaseil";
+const LIVE_STATE_DOCUMENT_PATH = "pulsepath/live/state";
+
 function getProjectId() {
   return (
     process.env.GOOGLE_CLOUD_PROJECT ??
     process.env.GCLOUD_PROJECT ??
     process.env.FIREBASE_PROJECT_ID ??
     process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ??
-    null
+    FALLBACK_PROJECT_ID
   );
+}
+
+function getDatabaseId() {
+  return process.env.FIRESTORE_DATABASE_ID ?? FALLBACK_FIRESTORE_DATABASE_ID;
 }
 
 async function getAccessToken() {
@@ -37,6 +45,16 @@ async function getAccessToken() {
   const payload = (await response.json()) as { access_token?: string };
   return payload.access_token ?? null;
 }
+
+export type GoogleSyncMode = "firestore" | "demo";
+
+export type GoogleRuntimeStatus = {
+  mode: GoogleSyncMode;
+  projectId: string;
+  databaseId: string;
+  appHosting: boolean;
+  vertexMode: "api-key" | "service-account" | "offline";
+};
 
 type FirestoreValue =
   | { nullValue: null }
@@ -88,16 +106,67 @@ function toFirestoreValue(value: unknown): FirestoreValue {
   };
 }
 
+function fromFirestoreValue(value: FirestoreValue): unknown {
+  if ("nullValue" in value) {
+    return null;
+  }
+
+  if ("stringValue" in value) {
+    return value.stringValue;
+  }
+
+  if ("integerValue" in value) {
+    return Number(value.integerValue);
+  }
+
+  if ("doubleValue" in value) {
+    return value.doubleValue;
+  }
+
+  if ("booleanValue" in value) {
+    return value.booleanValue;
+  }
+
+  if ("timestampValue" in value) {
+    return value.timestampValue;
+  }
+
+  if ("arrayValue" in value) {
+    return (value.arrayValue.values ?? []).map((entry) => fromFirestoreValue(entry));
+  }
+
+  return Object.fromEntries(
+    Object.entries(value.mapValue.fields).map(([key, entry]) => [key, fromFirestoreValue(entry)]),
+  );
+}
+
+function buildDocumentUrl(documentPath: string) {
+  return `https://firestore.googleapis.com/v1/projects/${getProjectId()}/databases/${getDatabaseId()}/documents/${documentPath}`;
+}
+
+export function getGoogleRuntimeStatus(mode: GoogleSyncMode): GoogleRuntimeStatus {
+  return {
+    mode,
+    projectId: getProjectId(),
+    databaseId: getDatabaseId(),
+    appHosting: Boolean(process.env.K_SERVICE),
+    vertexMode: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
+      ? "api-key"
+      : process.env.K_SERVICE || process.env.GOOGLE_ACCESS_TOKEN
+        ? "service-account"
+        : "offline",
+  };
+}
+
 async function patchDocument(documentPath: string, payload: unknown) {
-  const projectId = getProjectId();
   const accessToken = await getAccessToken();
 
-  if (!projectId || !accessToken) {
-    return { persisted: false as const, mode: "demo" as const };
+  if (!accessToken) {
+    return getGoogleRuntimeStatus("demo");
   }
 
   const response = await fetch(
-    `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/${documentPath}`,
+    buildDocumentUrl(documentPath),
     {
       method: "PATCH",
       headers: {
@@ -110,13 +179,50 @@ async function patchDocument(documentPath: string, payload: unknown) {
     },
   ).catch(() => null);
 
-  return response?.ok
-    ? { persisted: true as const, mode: "firestore" as const }
-    : { persisted: false as const, mode: "demo" as const };
+  return response?.ok ? getGoogleRuntimeStatus("firestore") : getGoogleRuntimeStatus("demo");
+}
+
+async function getDocument(documentPath: string) {
+  const accessToken = await getAccessToken();
+
+  if (!accessToken) {
+    return null;
+  }
+
+  const response = await fetch(buildDocumentUrl(documentPath), {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }).catch(() => null);
+
+  if (!response || response.status === 404 || !response.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as {
+    fields?: Record<string, FirestoreValue>;
+  };
+
+  if (!payload.fields) {
+    return null;
+  }
+
+  return Object.fromEntries(
+    Object.entries(payload.fields).map(([key, entry]) => [key, fromFirestoreValue(entry)]),
+  );
 }
 
 export async function persistScenarioState(state: VenueState) {
-  return patchDocument("pulsepath/live", state);
+  return patchDocument(LIVE_STATE_DOCUMENT_PATH, state);
+}
+
+export async function readScenarioState() {
+  const document = await getDocument(LIVE_STATE_DOCUMENT_PATH);
+
+  return {
+    state: document as VenueState | null,
+    sync: getGoogleRuntimeStatus(document ? "firestore" : "demo"),
+  };
 }
 
 export async function persistCrowdReport(report: CrowdReport) {

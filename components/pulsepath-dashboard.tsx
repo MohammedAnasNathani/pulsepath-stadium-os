@@ -1,12 +1,11 @@
 "use client";
 
-import Script from "next/script";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   buildDeterministicRecommendation,
   createOpsAnnouncement,
 } from "@/lib/recommendation-engine";
-import { getScenarioCards, normalizeVenueState } from "@/lib/scenarios";
+import { getScenarioCards } from "@/lib/scenarios";
 import {
   defaultProfile,
   goals,
@@ -22,25 +21,6 @@ import {
   type VenueState,
 } from "@/lib/types";
 
-declare global {
-  interface Window {
-    firebase?: {
-      apps?: unknown[];
-      initializeApp: (config: Record<string, string>) => unknown;
-      firestore: () => {
-        collection: (name: string) => {
-          doc: (id: string) => {
-            onSnapshot: (
-              onNext: (snapshot: { data: () => unknown }) => void,
-              onError?: (error: unknown) => void,
-            ) => () => void;
-          };
-        };
-      };
-    };
-  }
-}
-
 const scenarioCards = getScenarioCards();
 
 const goalLabels: Record<Goal, string> = {
@@ -52,15 +32,16 @@ const goalLabels: Record<Goal, string> = {
   "exit-fast": "Exit fast",
 };
 
-const publicFirebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-};
-
 type Props = {
   initialScenario: VenueState;
+};
+
+type GoogleStatus = {
+  mode: "firestore" | "demo";
+  projectId: string;
+  databaseId: string;
+  appHosting: boolean;
+  vertexMode: "api-key" | "service-account" | "offline";
 };
 
 function labelForTone(tone: "positive" | "warning" | "critical") {
@@ -93,7 +74,13 @@ export function PulsePathDashboard({ initialScenario }: Props) {
     key: string;
     value: RecommendationResponse;
   } | null>(null);
-  const [firebaseReady, setFirebaseReady] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<GoogleStatus>({
+    mode: "demo",
+    projectId: "kydo-project",
+    databaseId: "firestoredatabaseil",
+    appHosting: false,
+    vertexMode: "offline",
+  });
   const [realtimeMode, setRealtimeMode] = useState<"demo" | "listening" | "offline">("demo");
   const [feedbackNote, setFeedbackNote] = useState("");
   const [reportMessage, setReportMessage] = useState("Crowd felt smoother than expected once rerouted.");
@@ -124,43 +111,70 @@ export function PulsePathDashboard({ initialScenario }: Props) {
   const opsAnnouncement = createOpsAnnouncement(venueState, assistantResponse.rankedActions[0]);
 
   useEffect(() => {
-    if (!firebaseReady || !window.firebase) {
-      return;
-    }
+    let cancelled = false;
 
-    if (!Object.values(publicFirebaseConfig).every(Boolean)) {
-      return;
-    }
+    const refreshLiveState = async () => {
+      const response = await fetch(`/api/live-state?scenarioId=${initialScenario.scenarioId}`, {
+        cache: "no-store",
+      }).catch(() => null);
 
-    const firebase = window.firebase;
-
-    if (!firebase.apps?.length) {
-      firebase.initializeApp(publicFirebaseConfig as Record<string, string>);
-    }
-
-    const unsubscribe = firebase
-      .firestore()
-      .collection("pulsepath")
-      .doc("live")
-      .onSnapshot(
-        (snapshot) => {
-          const normalized = normalizeVenueState(snapshot.data());
-
-          if (!normalized) {
-            return;
-          }
-
-          setRealtimeMode("listening");
-          setVenueState(normalized);
-          setActiveScenario(normalized.scenarioId);
-        },
-        () => {
+      if (!response?.ok) {
+        if (!cancelled) {
           setRealtimeMode("offline");
-        },
-      );
+        }
+        return;
+      }
 
-    return () => unsubscribe();
-  }, [firebaseReady]);
+      const payload = (await response.json()) as {
+        state: VenueState;
+        sync: GoogleStatus;
+      };
+
+      if (cancelled) {
+        return;
+      }
+
+      setGoogleStatus(payload.sync);
+      setRealtimeMode(payload.sync.mode === "firestore" ? "listening" : "demo");
+      setVenueState(payload.state);
+      setActiveScenario(payload.state.scenarioId);
+    };
+
+    void refreshLiveState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [initialScenario.scenarioId]);
+
+  useEffect(() => {
+    if (googleStatus.mode !== "firestore") {
+      return;
+    }
+
+    const intervalId = window.setInterval(async () => {
+      const response = await fetch(`/api/live-state?scenarioId=${activeScenario}`, {
+        cache: "no-store",
+      }).catch(() => null);
+
+      if (!response?.ok) {
+        setRealtimeMode("offline");
+        return;
+      }
+
+      const payload = (await response.json()) as {
+        state: VenueState;
+        sync: GoogleStatus;
+      };
+
+      setGoogleStatus(payload.sync);
+      setRealtimeMode(payload.sync.mode === "firestore" ? "listening" : "demo");
+      setVenueState(payload.state);
+      setActiveScenario(payload.state.scenarioId);
+    }, 7000);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeScenario, googleStatus.mode]);
 
   const askAssistant = () => {
     startAssistantTransition(async () => {
@@ -184,10 +198,14 @@ export function PulsePathDashboard({ initialScenario }: Props) {
 
       const payload = (await response.json()) as RecommendationResponse;
       setAssistantOverride({ key: requestKey, value: payload });
+      setGoogleStatus((current) => ({
+        ...current,
+        vertexMode: payload.modelMode === "hybrid-ai" ? current.vertexMode : current.vertexMode,
+      }));
       setFeedbackNote(
         payload.modelMode === "hybrid-ai"
-          ? "Gemini layered an explanation on top of the deterministic routing engine."
-          : "No Gemini key detected, so PulsePath stayed in deterministic safety mode.",
+          ? "Gemini or Vertex AI layered a live explanation on top of the deterministic routing engine."
+          : "No live model path responded, so PulsePath stayed in deterministic safety mode.",
       );
     });
   };
@@ -207,14 +225,16 @@ export function PulsePathDashboard({ initialScenario }: Props) {
         return;
       }
 
-      const payload = (await response.json()) as { state: VenueState; sync: { mode: string } };
+      const payload = (await response.json()) as { state: VenueState; sync: GoogleStatus };
       setActiveScenario(scenarioId);
       setVenueState(payload.state);
       setAssistantOverride(null);
+      setGoogleStatus(payload.sync);
+      setRealtimeMode(payload.sync.mode === "firestore" ? "listening" : "demo");
       setFeedbackNote(
         payload.sync.mode === "firestore"
-          ? "Scenario synced to Firestore for cross-screen realtime playback."
-          : "Scenario changed locally. Add Cloud Run + Firestore env vars to unlock synced ops mode.",
+          ? `Scenario synced to Firestore database ${payload.sync.databaseId} for cross-screen playback.`
+          : "Scenario changed locally. Google sync could not be reached, so the app stayed in deterministic demo mode.",
       );
     });
   };
@@ -241,6 +261,8 @@ export function PulsePathDashboard({ initialScenario }: Props) {
         return;
       }
 
+      const payload = (await response.json()) as { sync: GoogleStatus };
+      setGoogleStatus(payload.sync);
       setFeedbackNote("Crowd report captured. Ops can use this to train future routing policies.");
     });
   };
@@ -249,15 +271,6 @@ export function PulsePathDashboard({ initialScenario }: Props) {
 
   return (
     <main className="ambient-screen relative overflow-hidden">
-      <Script
-        src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"
-        strategy="afterInteractive"
-        onLoad={() => setFirebaseReady(true)}
-      />
-      <Script
-        src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"
-        strategy="afterInteractive"
-      />
       <a className="sr-only-focusable" href="#dashboard">
         Skip to PulsePath dashboard
       </a>
@@ -285,14 +298,20 @@ export function PulsePathDashboard({ initialScenario }: Props) {
                     }`}
                   />
                   {realtimeMode === "listening"
-                    ? "Firestore synced"
+                    ? `Firestore live • ${googleStatus.databaseId}`
                     : realtimeMode === "offline"
                       ? "Realtime unavailable"
                       : "Demo state active"}
                 </span>
                 <span className="status-pill">
-                  <span className="status-dot text-[var(--amber-300)]" />
-                  Cloud Run ready
+                  <span
+                    className={`status-dot ${
+                      googleStatus.appHosting ? "text-[var(--turf-300)]" : "text-[var(--amber-300)]"
+                    }`}
+                  />
+                  {googleStatus.appHosting
+                    ? `Firebase App Hosting • ${googleStatus.projectId}`
+                    : "Hosted demo mode"}
                 </span>
               </div>
               <p className="display-kicker text-sm text-[var(--turf-300)]">
@@ -339,9 +358,9 @@ export function PulsePathDashboard({ initialScenario }: Props) {
             <div className="rounded-[1.5rem] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4">
               <p className="display-kicker text-xs text-[var(--snow-300)]">Why this can win</p>
               <ul className="mt-3 space-y-2 text-sm leading-6 text-[var(--snow-200)]">
-                <li>Deterministic routing stays safe even without AI keys.</li>
-                <li>Gemini upgrades explanations and ops messaging when configured.</li>
-                <li>Firestore-ready state sync makes the attendee and ops views feel alive.</li>
+                <li>Deterministic routing stays safe even without a live model response.</li>
+                <li>App Hosting + Firestore keep the venue twin Google-native and deployable.</li>
+                <li>Gemini/Vertex can upgrade explanations on top of the same routing engine.</li>
               </ul>
             </div>
           </div>
@@ -503,6 +522,9 @@ export function PulsePathDashboard({ initialScenario }: Props) {
                       <div className="mt-2 text-[var(--turf-300)]">
                         Confidence {assistantResponse.confidence}%
                       </div>
+                      <div className="mt-2 text-[var(--snow-300)]">
+                        Google AI: {googleStatus.vertexMode}
+                      </div>
                     </div>
                   </div>
 
@@ -559,6 +581,36 @@ export function PulsePathDashboard({ initialScenario }: Props) {
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <article className="rounded-[1.5rem] border border-[var(--line-strong)] bg-[rgba(80,212,136,0.08)] p-4 lg:col-span-2">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="display-kicker text-xs text-[var(--turf-300)]">Google services proof</div>
+                      <h3 className="mt-2 text-xl font-semibold text-white">
+                        Live venue twin status
+                      </h3>
+                      <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--snow-200)]">
+                        This demo is deployed on Firebase App Hosting and targets Firestore database{" "}
+                        <span className="font-semibold text-white">{googleStatus.databaseId}</span>.
+                        The attendee assistant remains deterministic by default and upgrades into
+                        Google-powered guidance when a live model path is available.
+                      </p>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-sm">
+                        <div className="display-kicker text-[10px] text-[var(--snow-300)]">Hosting</div>
+                        <div className="mt-1 text-white">{googleStatus.appHosting ? "App Hosting" : "Local/demo"}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-sm">
+                        <div className="display-kicker text-[10px] text-[var(--snow-300)]">Sync</div>
+                        <div className="mt-1 text-white">{googleStatus.mode}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-sm">
+                        <div className="display-kicker text-[10px] text-[var(--snow-300)]">AI Path</div>
+                        <div className="mt-1 text-white">{googleStatus.vertexMode}</div>
+                      </div>
+                    </div>
+                  </div>
+                </article>
                 {venueState.zones.map((zone) => (
                   <article key={zone.zoneId} className="rounded-[1.5rem] border border-white/8 bg-black/20 p-4">
                     <div className="flex items-start justify-between gap-3">

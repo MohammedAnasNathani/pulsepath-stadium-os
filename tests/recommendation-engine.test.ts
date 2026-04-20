@@ -61,3 +61,71 @@ test("assistant falls back to deterministic mode when AI request fails", async (
   assert.equal(response.modelMode, "deterministic");
   assert.ok(response.rankedActions.length >= 1);
 });
+
+test("assistant can use the hosted Vertex fallback when no Gemini API key is present", async () => {
+  const venueState = getScenarioState("pre-entry-rush");
+  const request: RecommendationRequest = {
+    profile: defaultProfile,
+    currentZone: "Fan Plaza",
+    activeScenario: "pre-entry-rush",
+    venueState,
+  };
+
+  const previousAccessToken = process.env.GOOGLE_ACCESS_TOKEN;
+  const previousGeminiKey = process.env.GEMINI_API_KEY;
+  const previousGoogleKey = process.env.GOOGLE_API_KEY;
+
+  process.env.GOOGLE_ACCESS_TOKEN = "test-token";
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.GOOGLE_API_KEY;
+
+  try {
+    const response = await buildAssistantResponse(request, {
+      fetchImpl: async (input, init) => {
+        const url = String(input);
+
+        assert.match(url, /aiplatform\.googleapis\.com/);
+        assert.equal(init?.headers && "Authorization" in init.headers ? init.headers.Authorization : "", "Bearer test-token");
+
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "Use East Gate because it is the cleanest live route." }],
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      },
+    });
+
+    assert.equal(response.modelMode, "hybrid-ai");
+    assert.match(response.reasoning, /East Gate/i);
+  } finally {
+    if (previousAccessToken === undefined) {
+      delete process.env.GOOGLE_ACCESS_TOKEN;
+    } else {
+      process.env.GOOGLE_ACCESS_TOKEN = previousAccessToken;
+    }
+
+    if (previousGeminiKey === undefined) {
+      delete process.env.GEMINI_API_KEY;
+    } else {
+      process.env.GEMINI_API_KEY = previousGeminiKey;
+    }
+
+    if (previousGoogleKey === undefined) {
+      delete process.env.GOOGLE_API_KEY;
+    } else {
+      process.env.GOOGLE_API_KEY = previousGoogleKey;
+    }
+  }
+});

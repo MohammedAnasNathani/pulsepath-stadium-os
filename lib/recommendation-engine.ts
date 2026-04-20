@@ -400,16 +400,41 @@ type AssistantOptions = {
   fetchImpl?: typeof fetch;
 };
 
+async function getHostedAccessToken(fetchImpl: typeof fetch) {
+  const staticToken = process.env.GOOGLE_ACCESS_TOKEN;
+
+  if (staticToken) {
+    return staticToken;
+  }
+
+  if (!process.env.K_SERVICE) {
+    return null;
+  }
+
+  const response = await fetchImpl(
+    "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token",
+    {
+      headers: {
+        "Metadata-Flavor": "Google",
+      },
+      signal: AbortSignal.timeout(2000),
+    },
+  ).catch(() => null);
+
+  if (!response?.ok) {
+    return null;
+  }
+
+  const payload = (await response.json()) as { access_token?: string };
+  return payload.access_token ?? null;
+}
+
 async function createGeminiReasoning(
   request: RecommendationRequest,
   deterministic: RecommendationResponse,
   fetchImpl: typeof fetch,
 ) {
   const apiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-
-  if (!apiKey) {
-    return null;
-  }
 
   const prompt = [
     "You are PulsePath, a stadium operations copilot.",
@@ -422,22 +447,55 @@ async function createGeminiReasoning(
     `Incidents: ${JSON.stringify(request.venueState.incidents)}`,
   ].join("\n");
 
-  const response = await fetchImpl(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-      signal: AbortSignal.timeout(6000),
-    },
-  );
+  let response: Response | null = null;
 
-  if (!response.ok) {
+  if (apiKey) {
+    response = await fetchImpl(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+        signal: AbortSignal.timeout(6000),
+      },
+    ).catch(() => null);
+  } else {
+    const accessToken = await getHostedAccessToken(fetchImpl);
+    const projectId =
+      process.env.GOOGLE_CLOUD_PROJECT ??
+      process.env.GCLOUD_PROJECT ??
+      process.env.FIREBASE_PROJECT_ID ??
+      "kydo-project";
+    const location = process.env.GOOGLE_VERTEX_LOCATION ?? "us-central1";
+
+    if (accessToken) {
+      response = await fetchImpl(
+        `https://aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/gemini-2.5-flash:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.4,
+              maxOutputTokens: 140,
+            },
+          }),
+          signal: AbortSignal.timeout(6000),
+        },
+      ).catch(() => null);
+    }
+  }
+
+  if (!response?.ok) {
     return null;
   }
 
